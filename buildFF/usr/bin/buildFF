@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+import os
+import sys
+import json
+import argparse
+
+# Constants for default settings
+DEFAULT_INDENTATION_WIDTH = 3
+CONFIG_DIR = os.path.expanduser("~/.config/buildFF")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+
+def load_config():
+    """Load the configuration from a file in the user's config directory."""
+    if not os.path.exists(CONFIG_DIR):
+        os.makedirs(CONFIG_DIR)
+    
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    
+    return {'indentation_width': DEFAULT_INDENTATION_WIDTH}
+
+
+def save_config(config):
+    """Save the configuration to a file in the user's config directory."""
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f)
+
+
+def get_indentation_width(config, args):
+    """Get the indentation width from the config or override it with the -i flag."""
+    if args.indentation_persist:
+        config['indentation_width'] = args.indentation_persist
+        save_config(config)  # Save the new indentation level to the config file
+    elif args.indentation_temp:
+        return args.indentation_temp
+    return config['indentation_width']
+
+
+class LineParsed:
+    def __init__(self, nesting_level: int = 0, name: str = ""):
+        self.nesting_level = nesting_level
+        self.name = name
+
+    def __repr__(self):
+        return f"LineParsed({self.nesting_level}, {self.name})"
+
+    def __eq__(self, other):
+        return isinstance(other, LineParsed) and self.nesting_level == other.nesting_level and self.name == other.name
+
+
+def get_line_first_part_length(line: str) -> int:
+    return len(line.rstrip().rsplit(' ', 1)[0])
+
+
+def get_nesting_level(characters: int, indentation_width: int) -> int:
+    return characters // indentation_width
+
+
+def get_line_info(line: str, indentation_width: int) -> LineParsed:
+    line = line.rstrip()
+    parts = line.rsplit(' ', 1)
+    if len(parts) == 1:
+        return LineParsed(0, parts[0])
+    first_part, second_part = parts
+    return LineParsed(get_nesting_level(len(first_part), indentation_width), second_part)
+
+
+class Node:
+    def __init__(self, val: LineParsed, children=None, full_path=""):
+        self.val = val
+        self.children = children if children is not None else []
+        self.full_path = full_path
+
+    def add_child(self, child_node):
+        self.children.append(child_node)
+
+    def __repr__(self):
+        return f"Node({self.val!r})"
+
+
+def parse_file_and_build_tree(lines, indentation_width) -> Node:
+    root = Node(LineParsed(-1, ""))
+    stack = [root]
+
+    for line in lines:
+        line_info = get_line_info(line, indentation_width)
+        new_node = Node(line_info)
+
+        while stack and stack[-1].val.nesting_level >= line_info.nesting_level:
+            stack.pop()
+
+        parent_node = stack[-1]
+        if parent_node.val.nesting_level != -1:
+            new_node.full_path = os.path.join(parent_node.full_path, new_node.val.name)
+        parent_node.add_child(new_node)
+        stack.append(new_node)
+
+    return root
+
+
+def create_structure(node: Node, base_path: str):
+    if node.val.nesting_level > 0:
+        node_path = os.path.join(base_path, node.full_path)
+        if node.children or node.val.name.endswith("/"):
+            os.makedirs(node_path, exist_ok=True)
+            print(f"Created directory: {node_path}")
+        else:
+            with open(node_path, 'w') as file:
+                file.write('')
+            print(f"Created file: {node_path}")
+
+    for child in node.children:
+        create_structure(child, base_path)
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Build a directory structure from a tree structure text file.')
+    parser.add_argument('-d', '--directory', default='.', help='Root directory to create the structure (default: current directory).')
+    parser.add_argument('-t', '--tree', help='Tree structure text file. Can also accept piped input.')
+    parser.add_argument('-i', '--indentation_temp', type=int, help='Set indentation width for this run only.')
+    parser.add_argument('-I', '--indentation_persist', type=int, help='Persistently change the indentation width for all future runs.')
+
+    args = parser.parse_args()
+
+    # Load config and determine indentation width
+    config = load_config()
+    indentation_width = get_indentation_width(config, args)
+
+    # Handle input
+    if args.tree:
+        with open(args.tree, 'r') as file:
+            lines = file.readlines()
+    else:
+        if not sys.stdin.isatty():
+            lines = sys.stdin.read().splitlines()
+        else:
+            print("Error: No tree structure provided. Use -t to specify a file or pipe input.")
+            sys.exit(1)
+
+    base_folder = os.path.abspath(args.directory)
+    os.makedirs(base_folder, exist_ok=True)
+
+    tree_root = parse_file_and_build_tree(lines, indentation_width)
+    create_structure(tree_root, base_folder)
+
+
+if __name__ == "__main__":
+    main()

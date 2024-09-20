@@ -1,0 +1,8 @@
+Package: buildFF
+Version: 1.0
+Section: utils
+Priority: optional
+Architecture: all
+Maintainer: Mike Reynard <mike.reynard23@gmail.com>
+Description: A tool to create folder and files structure from a text file that represent the folder/file structure.
+
