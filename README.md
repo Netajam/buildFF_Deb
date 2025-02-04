@@ -46,4 +46,35 @@ To use BuildFF, you can specify a tree file or pipe a tree structure directly in
 #### Using a Tree File
 
 ```bash
-buildFF -t struct.txt -d /path/to/directory
+buildFF -t struct.txt -d /path/to/directory```
+
+
+## Input text file
+To work properly your input text file should be structure something like that:
+```txt
+root/
+├── configs/
+│   └── train_config.yaml
+├── data/
+│   ├── datasets.py
+│   └── transforms.py
+├── diffusion/
+│   ├── scheduler.py
+│   └── sampler.py
+├── models/
+│   ├── unet.py
+│   └── layers.py
+├── scripts/
+│   ├── train.py
+│   └── sample.py
+├── utils/
+│   ├── logger.py
+│   ├── visualize.py
+│   └── helpers.py
+├── checkpoints/
+├── outputs/
+├── tests/
+└── README.md
+```
+
+ 
